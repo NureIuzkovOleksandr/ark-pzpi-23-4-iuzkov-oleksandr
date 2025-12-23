@@ -1,0 +1,23 @@
+# FastAPI та залежності
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Pydantic та валідація
+pydantic==2.5.0
+pydantic[email]==2.5.0
+
+# Змінні середовища
+python-dotenv==1.0.0
+
+# Безпека (JWT та паролі)
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
+bcrypt==4.0.1
+
+# MQTT для IoT
+paho-mqtt==1.6.1
