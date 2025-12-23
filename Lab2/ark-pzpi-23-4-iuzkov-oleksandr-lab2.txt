@@ -1,0 +1,1210 @@
+﻿Харківський національний університет радіоелектроніки
+Факультет комп’ютерних наук
+Катедра програмної інженерії
+
+
+Звіт
+з лабораторної роботи № 2
+з дисципліни «Аналіз та рефакторинг коду»
+на тему «Розробка бази даних для серверної частини системи та прикладного програмного інтерфейсу (API)»
+
+
+
+    Виконав:                                                                           Перевірив:
+ст. гр. ПЗПІ-23-4                                                              ст. викладач кафедри ПІ
+Юзков Олександр                                          	         Сокорчук Ігор Петрович
+
+
+
+Харків 2025
+1 ІСТОРІЯ ЗМІН
+
+№ДатаВерсія звітуОпис змін та виправлень110.12.20250.1Зроблено звіт
+2 ЗАВДАННЯ
+     Метою даної роботи є отримання практичного досвіду розробки серверної частини програмної системи, що охоплює проєктування бази даних, побудову UML- та ER-діаграм, реалізацію й тестування API для взаємодії з клієнтськими застосунками, а також використання Git-репозиторіїв і підготовку технічної документації.
+3 ОПИС ВИКОНАНОЇ РОБОТИ
+     Темою проєкту для виконання лабораторних робіт є програмна система для контролю та регулюванню температури та вологості в приміщеннях. 
+     Першим кроком при розробці програмної системи є розробка її будови (див. рис. 3.1).
+
+Рисунок 3.1- Архітектурне рішення для серверної частини системи, клієнтських взаємодій та БД
+Модель User (Користувач)
+     User — зареєстрований користувач системи. Користувач має персональні дані та може мати різні ролі у системі (адміністратор, звичайний користувач).
+
+Основні атрибути:
+* id — унікальний ідентифікатор
+* username — ім'я користувача (унікальне)
+* email — електронна пошта (унікальна)
+* password_hash — хеш паролю
+* first_name, last_name — ім'я та прізвище
+* phone_number — номер телефону
+* created_at — дата реєстрації
+* is_active — статус активності
+Модель Room (Приміщення)
+     Room — фізичне приміщення/кімната, де встановлені сенсори та кліматичні пристрої.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* name — назва приміщення
+* description — опис
+* floor — поверх
+* area — площа (м²)
+* user_id — власник приміщення (foreign key)
+* created_at — дата створення
+Модель Sensor (Сенсор)
+     Sensor — IoT-пристрій, що вимірює температуру та вологість.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* name — назва сенсора
+* device_id — ідентифікатор пристрою
+* room_id — приміщення, де встановлено (foreign key)
+* sensor_type — тип сенсора (temperature/humidity/combined)
+* status — статус (active/inactive/error)
+* last_online — час останньої активності
+* created_at — дата додавання
+Модель SensorReading (Показник сенсора)
+     SensorReading — запис даних, отриманих з сенсора.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* sensor_id — сенсор (foreign key)
+* temperature — температура (°C)
+* humidity — вологість (%)
+* timestamp — час вимірювання
+* is_anomaly — позначка аномалії
+Модель ClimateDevice (Кліматичний пристрій)
+     ClimateDevice — пристрій для регулювання клімату (кондиціонер, обігрівач, зволожувач).
+Основні атрибути:
+* id — унікальний ідентифікатор
+* name — назва пристрою
+* device_id — ідентифікатор пристрою
+* room_id — приміщення (foreign key)
+* device_type — тип (air_conditioner/heater/humidifier/dehumidifier)
+* status — статус (on/off/error)
+* power_consumption — споживання енергії (Вт)
+* created_at — дата додавання
+Модель DeviceCommand (Команда пристрою)
+     DeviceCommand — команда, відправлена на кліматичний пристрій.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* device_id — пристрій (foreign key)
+* command — команда (turn_on/turn_off/set_temperature)
+* parameters — параметри команди (JSON)
+* issued_by — користувач, що ініціював (foreign key)
+* issued_at — час відправки
+* executed — чи виконано
+* executed_at — час виконання
+Модель ClimateThreshold (Поріг клімату)
+     ClimateThreshold — налаштування порогових значень для автоматичного регулювання.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* room_id — приміщення (foreign key)
+* min_temperature — мінімальна температура
+* max_temperature — максимальна температура
+* min_humidity — мінімальна вологість
+* max_humidity — максимальна вологість
+* auto_control_enabled — увімкнено автоматичне керування
+* created_at — дата створення
+* updated_at — дата оновлення
+Модель Alert (Сповіщення)
+     Alert — повідомлення про критичні відхилення показників.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* room_id — приміщення (foreign key)
+* alert_type — тип (temperature_high/temperature_low/humidity_high/humidity_low/device_error)
+* message — текст повідомлення
+* severity — рівень важливості (info/warning/critical)
+* is_read — чи прочитано
+* created_at — час створення
+Модель DeviceLog (Журнал пристрою)
+     DeviceLog — технічні логи роботи IoT-пристроїв.
+Основні атрибути:
+* id — унікальний ідентифікатор
+* device_id — пристрій (може бути sensor або climate_device)
+* device_type — тип пристрою (sensor/climate_device)
+* log_level — рівень (info/warning/error)
+* message — повідомлення
+* metadata — додаткові дані (JSON)
+* timestamp — час запису
+Для серверної частини системи розроблено UML-діаграму прецедентів, яка відображає основні сценарії взаємодії користувачів та IoT-пристроїв із системою (див. рис. 3.2). 
+Рисунок 3.2- UML-діаграма прецедентів серверної складової системи
+     Побудуємо ER-діаграму даних, у межах якої буде визначено основні сутності, їхні атрибути та взаємозв’язки між ними в базі даних. ER-діаграма використовується для наочного представлення структури даних (див. рис. 3.3).
+
+Рисунок 3.3- ER діаграма структури даних
+     На основі ER-діаграми виконано проєктування таблиць бази даних. У першій нормальній формі (1NF) кожен стовпець повинен містити лише атомарні значення, не допускаються повторювані групи, а всі записи мають бути унікальними. У створеній моделі всі сутності розділено на окремі таблиці, а їхні атрибути подані як неподільні. Відсутні складені значення, масиви чи дубльовані колонки. Таким чином, структура даних повністю відповідає вимогам 1NF.
+     Друга нормальна форма (2NF) передбачає відповідність 1NF і забороняє часткові залежності від складеного первинного ключа. Оскільки в схемі використано штучні (сурогатні) первинні ключі та відсутні складені ключі, часткові залежності виключені. Усі атрибути залежать від одного цілісного первинного ключа, тому вимоги 2NF також виконано.
+     Третя нормальна форма (3NF) додатково вимагає відсутності транзитивних залежностей, коли неключовий атрибут визначається іншим неключовим атрибутом. У запропонованій структурі немає атрибутів, що описують інші неключові поля; усі логічні зв'язки між сутностями реалізовано через зовнішні ключі. Отже, транзитивні залежності відсутні, і схема повністю відповідає 3NF.
+     Побудовано діаграму структури бази даних. На ній відображено всі таблиці, їхні взаємозв'язки та ключові атрибути (див. рис. 3.4).
+     
+Рисунок 3.4- Діаграма БД
+При створенні API застосовано REST, реалізовані наступні ендпоінти. 
+
+Рисунок 3.5- Ендпоінти авторизації
+
+Рисунок 3.6- Ендпоінти керуванням користувачем
+
+Рисунок 3.7- Ендпоінти управлінням кімнатами
+
+Рисунок 3.8- Ендпоінти управління сенсорами
+
+
+Рисунок 3.9- Ендпоінти управлінням кліматичними девайсами
+
+Рисунок 3.10- Ендпоінти управління кліматичними порогами
+
+Рисунок 3.11- Ендпоінти управління повідомленнями
+
+
+
+
+
+
+
+
+4 ВИСНОВКИ
+     У ході виконання лабораторної роботи було опановано та реалізовано повний цикл розробки серверної частини програмної системи. Зокрема, виконано проєктування бази даних, розроблено API для взаємодії з клієнтськими застосунками та здійснено їх тестування. Крім того, здобуто практичні навички створення UML- та ER-діаграм, проєктування баз даних, програмної реалізації API, роботи з Git-репозиторіями й підготовки технічної документації.
+5 ВИКОРИСТАНІ ДЖЕРЕЛА
+1. Методичні вказівки до лабораторних робіт з дисципліни «Аналіз та рефакторинг коду програмного забезпечення» (дата звернення: 10.12.2025).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ДОДАТОК А
+Відеозапис
+Відеозапис презентації результатів лабораторної роботи:                            https://youtu.be/-2j9IfKLGJ0
+Хронологічний опис відеозапису:
+00:00 – Вступ 
+01:30 – Опис виконаної роботи 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ДОДАТОК В
+Програмний код
+GitHub репозиторій: https://github.com/NureIuzkovOleksandr/ark-pzpi-23-4-iuzkov-oleksandr/tree/main/Lab2/ark-pzpi-23-4-iuzkov-oleksandr-lab2
+В.1 Код для створення бд.
+1. --
+2. -- PostgreSQL database dump
+3. --
+4. 
+5. \restrict bsg3aUH3sjavr17cNPAehVsM5HQw1lflbm4gP2DdWuyBNfblRf81OVRlaT22bLf
+6. 
+7. -- Dumped from database version 18.1
+8. -- Dumped by pg_dump version 18.1
+9. 
+10. -- Started on 2025-12-23 10:23:11
+11. 
+12. SET statement_timeout = 0;
+13. SET lock_timeout = 0;
+14. SET idle_in_transaction_session_timeout = 0;
+15. SET transaction_timeout = 0;
+16. SET client_encoding = 'UTF8';
+17. SET standard_conforming_strings = on;
+18. SELECT pg_catalog.set_config('search_path', '', false);
+19. SET check_function_bodies = false;
+20. SET xmloption = content;
+21. SET client_min_messages = warning;
+22. SET row_security = off;
+23. 
+24. --
+25. -- TOC entry 237 (class 1255 OID 16583)
+26. -- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: postgres
+27. --
+28. 
+29. CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
+30.     LANGUAGE plpgsql
+31.     AS $$
+32. BEGIN
+33.     NEW.updated_at = CURRENT_TIMESTAMP;
+34.     RETURN NEW;
+35. END;
+36. $$;
+37. 
+38. ALTER FUNCTION public.update_updated_at_column() OWNER TO postgres;
+39. 
+40. SET default_tablespace = '';
+41. 
+42. SET default_table_access_method = heap;
+43. 
+44. --
+45. -- TOC entry 234 (class 1259 OID 16534)
+46. -- Name: alert; Type: TABLE; Schema: public; Owner: postgres
+47. --
+48. 
+49. CREATE TABLE public.alert (
+50.     id integer NOT NULL,
+51.     room_id integer NOT NULL,
+52.     alert_type character varying(50) NOT NULL,
+53.     message text NOT NULL,
+54.     severity character varying(20) DEFAULT 'info'::character varying,
+55.     is_read boolean DEFAULT false,
+56.     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+57.     CONSTRAINT alert_alert_type_check CHECK (((alert_type)::text = ANY ((ARRAY['temperature_high'::character varying, 'temperature_low'::character varying, 'humidity_high'::character varying, 'humidity_low'::character varying, 'device_error'::character varying])::text[]))),
+58.     CONSTRAINT alert_severity_check CHECK (((severity)::text = ANY ((ARRAY['info'::character varying, 'warning'::character varying, 'critical'::character varying])::text[])))
+59. );
+60. 
+61. ALTER TABLE public.alert OWNER TO postgres;
+62. 
+63. --
+64. -- TOC entry 5151 (class 0 OID 0)
+65. -- Dependencies: 234
+66. -- Name: TABLE alert; Type: COMMENT; Schema: public; Owner: postgres
+67. --
+68. 
+69. COMMENT ON TABLE public.alert IS 'Сповіщення про критичні відхилення';
+70. 
+71. --
+72. -- TOC entry 233 (class 1259 OID 16533)
+73. -- Name: alert_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+74. --
+75. 
+76. CREATE SEQUENCE public.alert_id_seq
+77.     AS integer
+78.     START WITH 1
+79.     INCREMENT BY 1
+80.     NO MINVALUE
+81.     NO MAXVALUE
+82.     CACHE 1;
+83. 
+84. ALTER SEQUENCE public.alert_id_seq OWNER TO postgres;
+85. 
+86. --
+87. -- TOC entry 5152 (class 0 OID 0)
+88. -- Dependencies: 233
+89. -- Name: alert_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+90. --
+91. 
+92. ALTER SEQUENCE public.alert_id_seq OWNED BY public.alert.id;
+93. 
+94. --
+95. -- TOC entry 228 (class 1259 OID 16466)
+96. -- Name: climate_device; Type: TABLE; Schema: public; Owner: postgres
+97. --
+98. 
+99. CREATE TABLE public.climate_device (
+100.     id integer NOT NULL,
+101.     name character varying(100) NOT NULL,
+102.     device_id character varying(100) NOT NULL,
+103.     room_id integer NOT NULL,
+104.     device_type character varying(50) NOT NULL,
+105.     status character varying(20) DEFAULT 'off'::character varying,
+106.     power_consumption double precision,
+107.     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+108.     CONSTRAINT climate_device_device_type_check CHECK (((device_type)::text = ANY ((ARRAY['air_conditioner'::character varying, 'heater'::character varying, 'humidifier'::character varying, 'dehumidifier'::character varying])::text[]))),
+109.     CONSTRAINT climate_device_status_check CHECK (((status)::text = ANY ((ARRAY['on'::character varying, 'off'::character varying, 'error'::character varying])::text[])))
+110. );
+111. 
+112. ALTER TABLE public.climate_device OWNER TO postgres;
+113. 
+114. --
+115. -- TOC entry 5153 (class 0 OID 0)
+116. -- Dependencies: 228
+117. -- Name: TABLE climate_device; Type: COMMENT; Schema: public; Owner: postgres
+118. --
+119. 
+120. COMMENT ON TABLE public.climate_device IS 'Кліматичні пристрої (кондиціонери, обігрівачі)';
+121. 
+122. --
+123. -- TOC entry 227 (class 1259 OID 16465)
+124. -- Name: climate_device_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+125. --
+126. 
+127. CREATE SEQUENCE public.climate_device_id_seq
+128.     AS integer
+129.     START WITH 1
+130.     INCREMENT BY 1
+131.     NO MINVALUE
+132.     NO MAXVALUE
+133.     CACHE 1;
+134. 
+135. ALTER SEQUENCE public.climate_device_id_seq OWNER TO postgres;
+136. 
+137. --
+138. -- TOC entry 5154 (class 0 OID 0)
+139. -- Dependencies: 227
+140. -- Name: climate_device_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+141. --
+142. 
+143. ALTER SEQUENCE public.climate_device_id_seq OWNED BY public.climate_device.id;
+144. 
+145. --
+146. -- TOC entry 232 (class 1259 OID 16515)
+147. -- Name: climate_threshold; Type: TABLE; Schema: public; Owner: postgres
+148. --
+149. 
+150. CREATE TABLE public.climate_threshold (
+151.     id integer NOT NULL,
+152.     room_id integer NOT NULL,
+153.     min_temperature double precision,
+154.     max_temperature double precision,
+155.     min_humidity double precision,
+156.     max_humidity double precision,
+157.     auto_control_enabled boolean DEFAULT false,
+158.     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+159.     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+160. );
+161. 
+162. ALTER TABLE public.climate_threshold OWNER TO postgres;
+163. 
+164. --
+165. -- TOC entry 5155 (class 0 OID 0)
+166. -- Dependencies: 232
+167. -- Name: TABLE climate_threshold; Type: COMMENT; Schema: public; Owner: postgres
+168. --
+169. 
+170. COMMENT ON TABLE public.climate_threshold IS 'Порогові значення для автоматичного регулювання';
+171. 
+172. --
+173. -- TOC entry 231 (class 1259 OID 16514)
+174. -- Name: climate_threshold_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+175. --
+176. 
+177. CREATE SEQUENCE public.climate_threshold_id_seq
+178.     AS integer
+179.     START WITH 1
+180.     INCREMENT BY 1
+181.     NO MINVALUE
+182.     NO MAXVALUE
+183.     CACHE 1;
+184. 
+185. ALTER SEQUENCE public.climate_threshold_id_seq OWNER TO postgres;
+186. 
+187. --
+188. -- TOC entry 5156 (class 0 OID 0)
+189. -- Dependencies: 231
+190. -- Name: climate_threshold_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+191. --
+192. 
+193. ALTER SEQUENCE public.climate_threshold_id_seq OWNED BY public.climate_threshold.id;
+194. 
+195. --
+196. -- TOC entry 230 (class 1259 OID 16489)
+197. -- Name: device_command; Type: TABLE; Schema: public; Owner: postgres
+198. --
+199. 
+200. CREATE TABLE public.device_command (
+201.     id integer NOT NULL,
+202.     device_id integer NOT NULL,
+203.     command character varying(50) NOT NULL,
+204.     parameters jsonb,
+205.     issued_by integer NOT NULL,
+206.     issued_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+207.     executed boolean DEFAULT false,
+208.     executed_at timestamp without time zone,
+209.     CONSTRAINT device_command_command_check CHECK (((command)::text = ANY ((ARRAY['turn_on'::character varying, 'turn_off'::character varying, 'set_temperature'::character varying, 'set_humidity'::character varying])::text[])))
+210. );
+211. 
+212. ALTER TABLE public.device_command OWNER TO postgres;
+213. 
+214. --
+215. -- TOC entry 5157 (class 0 OID 0)
+216. -- Dependencies: 230
+217. -- Name: TABLE device_command; Type: COMMENT; Schema: public; Owner: postgres
+218. --
+219. 
+220. COMMENT ON TABLE public.device_command IS 'Команди для керування пристроями';
+221. 
+222. --
+223. -- TOC entry 229 (class 1259 OID 16488)
+224. -- Name: device_command_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+225. --
+226. 
+227. CREATE SEQUENCE public.device_command_id_seq
+228.     AS integer
+229.     START WITH 1
+230.     INCREMENT BY 1
+231.     NO MINVALUE
+232.     NO MAXVALUE
+233.     CACHE 1;
+234. 
+235. ALTER SEQUENCE public.device_command_id_seq OWNER TO postgres;
+236. 
+237. --
+238. -- TOC entry 5158 (class 0 OID 0)
+239. -- Dependencies: 229
+240. -- Name: device_command_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+241. --
+242. 
+243. ALTER SEQUENCE public.device_command_id_seq OWNED BY public.device_command.id;
+244. 
+245. --
+246. -- TOC entry 236 (class 1259 OID 16557)
+247. -- Name: device_log; Type: TABLE; Schema: public; Owner: postgres
+248. --
+249. 
+250. CREATE TABLE public.device_log (
+251.     id integer NOT NULL,
+252.     device_id integer NOT NULL,
+253.     device_type character varying(20) NOT NULL,
+254.     log_level character varying(20) DEFAULT 'info'::character varying,
+255.     message text NOT NULL,
+256.     metadata jsonb,
+257.     "timestamp" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+258.     CONSTRAINT device_log_device_type_check CHECK (((device_type)::text = ANY ((ARRAY['sensor'::character varying, 'climate_device'::character varying])::text[]))),
+259.     CONSTRAINT device_log_log_level_check CHECK (((log_level)::text = ANY ((ARRAY['info'::character varying, 'warning'::character varying, 'error'::character varying])::text[])))
+260. );
+261. 
+262. ALTER TABLE public.device_log OWNER TO postgres;
+263. 
+264. --
+265. -- TOC entry 5159 (class 0 OID 0)
+266. -- Dependencies: 236
+267. -- Name: TABLE device_log; Type: COMMENT; Schema: public; Owner: postgres
+268. --
+269. 
+270. COMMENT ON TABLE public.device_log IS 'Технічні логи роботи пристроїв';
+271. 
+272. --
+273. -- TOC entry 235 (class 1259 OID 16556)
+274. -- Name: device_log_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+275. --
+276. 
+277. CREATE SEQUENCE public.device_log_id_seq
+278.     AS integer
+279.     START WITH 1
+280.     INCREMENT BY 1
+281.     NO MINVALUE
+282.     NO MAXVALUE
+283.     CACHE 1;
+284. 
+285. ALTER SEQUENCE public.device_log_id_seq OWNER TO postgres;
+286. 
+287. --
+288. -- TOC entry 5160 (class 0 OID 0)
+289. -- Dependencies: 235
+290. -- Name: device_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+291. --
+292. 
+293. ALTER SEQUENCE public.device_log_id_seq OWNED BY public.device_log.id;
+294. 
+295. --
+296. -- TOC entry 222 (class 1259 OID 16409)
+297. -- Name: room; Type: TABLE; Schema: public; Owner: postgres
+298. --
+299. 
+300. CREATE TABLE public.room (
+301.     id integer NOT NULL,
+302.     name character varying(100) NOT NULL,
+303.     description text,
+304.     floor integer,
+305.     area double precision,
+306.     user_id integer NOT NULL,
+307.     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+308. );
+309. 
+310. ALTER TABLE public.room OWNER TO postgres;
+311. 
+312. --
+313. -- TOC entry 5161 (class 0 OID 0)
+314. -- Dependencies: 222
+315. -- Name: TABLE room; Type: COMMENT; Schema: public; Owner: postgres
+316. --
+317. 
+318. COMMENT ON TABLE public.room IS 'Приміщення з встановленими пристроями';
+319. 
+320. --
+321. -- TOC entry 221 (class 1259 OID 16408)
+322. -- Name: room_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+323. --
+324. 
+325. CREATE SEQUENCE public.room_id_seq
+326.     AS integer
+327.     START WITH 1
+328.     INCREMENT BY 1
+329.     NO MINVALUE
+330.     NO MAXVALUE
+331.     CACHE 1;
+332. 
+333. ALTER SEQUENCE public.room_id_seq OWNER TO postgres;
+334. 
+335. --
+336. -- TOC entry 5162 (class 0 OID 0)
+337. -- Dependencies: 221
+338. -- Name: room_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+339. --
+340. 
+341. ALTER SEQUENCE public.room_id_seq OWNED BY public.room.id;
+342. 
+343. --
+344. -- TOC entry 224 (class 1259 OID 16427)
+345. -- Name: sensor; Type: TABLE; Schema: public; Owner: postgres
+346. --
+347. 
+348. CREATE TABLE public.sensor (
+349.     id integer NOT NULL,
+350.     name character varying(100) NOT NULL,
+351.     device_id character varying(100) NOT NULL,
+352.     room_id integer NOT NULL,
+353.     sensor_type character varying(50) NOT NULL,
+354.     status character varying(20) DEFAULT 'active'::character varying,
+355.     last_online timestamp without time zone,
+356.     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+357.     CONSTRAINT sensor_sensor_type_check CHECK (((sensor_type)::text = ANY ((ARRAY['temperature'::character varying, 'humidity'::character varying, 'combined'::character varying])::text[]))),
+358.     CONSTRAINT sensor_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'error'::character varying])::text[])))
+359. );
+360. 
+361. ALTER TABLE public.sensor OWNER TO postgres;
+362. 
+363. --
+364. -- TOC entry 5163 (class 0 OID 0)
+365. -- Dependencies: 224
+366. -- Name: TABLE sensor; Type: COMMENT; Schema: public; Owner: postgres
+367. --
+368. 
+369. COMMENT ON TABLE public.sensor IS 'IoT-сенсори температури та вологості';
+370. 
+371. --
+372. -- TOC entry 223 (class 1259 OID 16426)
+373. -- Name: sensor_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+374. --
+375. 
+376. CREATE SEQUENCE public.sensor_id_seq
+377.     AS integer
+378.     START WITH 1
+379.     INCREMENT BY 1
+380.     NO MINVALUE
+381.     NO MAXVALUE
+382.     CACHE 1;
+383. 
+384. ALTER SEQUENCE public.sensor_id_seq OWNER TO postgres;
+385. 
+386. --
+387. -- TOC entry 5164 (class 0 OID 0)
+388. -- Dependencies: 223
+389. -- Name: sensor_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+390. --
+391. 
+392. ALTER SEQUENCE public.sensor_id_seq OWNED BY public.sensor.id;
+393. 
+394. --
+395. -- TOC entry 226 (class 1259 OID 16450)
+396. -- Name: sensor_reading; Type: TABLE; Schema: public; Owner: postgres
+397. --
+398. 
+399. CREATE TABLE public.sensor_reading (
+400.     id integer NOT NULL,
+401.     sensor_id integer NOT NULL,
+402.     temperature double precision,
+403.     humidity double precision,
+404.     "timestamp" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+405.     is_anomaly boolean DEFAULT false
+406. );
+407. 
+408. ALTER TABLE public.sensor_reading OWNER TO postgres;
+409. 
+410. --
+411. -- TOC entry 5165 (class 0 OID 0)
+412. -- Dependencies: 226
+413. -- Name: TABLE sensor_reading; Type: COMMENT; Schema: public; Owner: postgres
+414. --
+415. 
+416. COMMENT ON TABLE public.sensor_reading IS 'Показники з сенсорів';
+417. 
+418. --
+419. -- TOC entry 225 (class 1259 OID 16449)
+420. -- Name: sensor_reading_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+421. --
+422. 
+423. CREATE SEQUENCE public.sensor_reading_id_seq
+424.     AS integer
+425.     START WITH 1
+426.     INCREMENT BY 1
+427.     NO MINVALUE
+428.     NO MAXVALUE
+429.     CACHE 1;
+430. 
+431. ALTER SEQUENCE public.sensor_reading_id_seq OWNER TO postgres;
+432. 
+433. --
+434. -- TOC entry 5166 (class 0 OID 0)
+435. -- Dependencies: 225
+436. -- Name: sensor_reading_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+437. --
+438. 
+439. ALTER SEQUENCE public.sensor_reading_id_seq OWNED BY public.sensor_reading.id;
+440. 
+441. --
+442. -- TOC entry 220 (class 1259 OID 16390)
+443. -- Name: user; Type: TABLE; Schema: public; Owner: postgres
+444. --
+445. 
+446. CREATE TABLE public."user" (
+447.     id integer NOT NULL,
+448.     username character varying(50) NOT NULL,
+449.     email character varying(100) NOT NULL,
+450.     password_hash character varying(255) NOT NULL,
+451.     first_name character varying(50),
+452.     last_name character varying(50),
+453.     phone_number character varying(20),
+454.     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+455.     is_active boolean DEFAULT true
+456. );
+457. 
+458. ALTER TABLE public."user" OWNER TO postgres;
+459. 
+460. --
+461. -- TOC entry 5167 (class 0 OID 0)
+462. -- Dependencies: 220
+463. -- Name: TABLE "user"; Type: COMMENT; Schema: public; Owner: postgres
+464. --
+465. 
+466. COMMENT ON TABLE public."user" IS 'Зареєстровані користувачі системи';
+467. 
+468. --
+469. -- TOC entry 219 (class 1259 OID 16389)
+470. -- Name: user_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+471. --
+472. 
+473. CREATE SEQUENCE public.user_id_seq
+474.     AS integer
+475.     START WITH 1
+476.     INCREMENT BY 1
+477.     NO MINVALUE
+478.     NO MAXVALUE
+479.     CACHE 1;
+480. 
+481. ALTER SEQUENCE public.user_id_seq OWNER TO postgres;
+482. 
+483. --
+484. -- TOC entry 5168 (class 0 OID 0)
+485. -- Dependencies: 219
+486. -- Name: user_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+487. --
+488. 
+489. ALTER SEQUENCE public.user_id_seq OWNED BY public."user".id;
+490. 
+491. --
+492. -- TOC entry 4918 (class 2604 OID 16537)
+493. -- Name: alert id; Type: DEFAULT; Schema: public; Owner: postgres
+494. --
+495. 
+496. ALTER TABLE ONLY public.alert ALTER COLUMN id SET DEFAULT nextval('public.alert_id_seq'::regclass);
+497. 
+498. --
+499. -- TOC entry 4908 (class 2604 OID 16469)
+500. -- Name: climate_device id; Type: DEFAULT; Schema: public; Owner: postgres
+501. --
+502. 
+503. ALTER TABLE ONLY public.climate_device ALTER COLUMN id SET DEFAULT nextval('public.climate_device_id_seq'::regclass);
+504. 
+505. --
+506. -- TOC entry 4914 (class 2604 OID 16518)
+507. -- Name: climate_threshold id; Type: DEFAULT; Schema: public; Owner: postgres
+508. --
+509. 
+510. ALTER TABLE ONLY public.climate_threshold ALTER COLUMN id SET DEFAULT nextval('public.climate_threshold_id_seq'::regclass);
+511. 
+512. --
+513. -- TOC entry 4911 (class 2604 OID 16492)
+514. -- Name: device_command id; Type: DEFAULT; Schema: public; Owner: postgres
+515. --
+516. 
+517. ALTER TABLE ONLY public.device_command ALTER COLUMN id SET DEFAULT nextval('public.device_command_id_seq'::regclass);
+518. 
+519. --
+520. -- TOC entry 4922 (class 2604 OID 16560)
+521. -- Name: device_log id; Type: DEFAULT; Schema: public; Owner: postgres
+522. --
+523. 
+524. ALTER TABLE ONLY public.device_log ALTER COLUMN id SET DEFAULT nextval('public.device_log_id_seq'::regclass);
+525. 
+526. --
+527. -- TOC entry 4900 (class 2604 OID 16412)
+528. -- Name: room id; Type: DEFAULT; Schema: public; Owner: postgres
+529. --
+530. 
+531. ALTER TABLE ONLY public.room ALTER COLUMN id SET DEFAULT nextval('public.room_id_seq'::regclass);
+532. 
+533. --
+534. -- TOC entry 4902 (class 2604 OID 16430)
+535. -- Name: sensor id; Type: DEFAULT; Schema: public; Owner: postgres
+536. --
+537. 
+538. ALTER TABLE ONLY public.sensor ALTER COLUMN id SET DEFAULT nextval('public.sensor_id_seq'::regclass);
+539. 
+540. --
+541. -- TOC entry 4905 (class 2604 OID 16453)
+542. -- Name: sensor_reading id; Type: DEFAULT; Schema: public; Owner: postgres
+543. --
+544. 
+545. ALTER TABLE ONLY public.sensor_reading ALTER COLUMN id SET DEFAULT nextval('public.sensor_reading_id_seq'::regclass);
+546. 
+547. --
+548. -- TOC entry 4897 (class 2604 OID 16393)
+549. -- Name: user id; Type: DEFAULT; Schema: public; Owner: postgres
+550. --
+551. 
+552. ALTER TABLE ONLY public."user" ALTER COLUMN id SET DEFAULT nextval('public.user_id_seq'::regclass);
+553. 
+554. --
+555. -- TOC entry 5143 (class 0 OID 16534)
+556. -- Dependencies: 234
+557. -- Data for Name: alert; Type: TABLE DATA; Schema: public; Owner: postgres
+558. --
+559. 
+560. COPY public.alert (id, room_id, alert_type, message, severity, is_read, created_at) FROM stdin;
+561. 1   3   temperature_high    Температура 28°C перевищує максимум 24°C!   warning f   2025-12-23 09:40:21.354288
+562. 2   3   humidity_low    Температура 28°C перевищує максимум 24°C!   info    f   2025-12-23 09:40:44.870215
+563. \.
+564. 
+565. --
+566. -- TOC entry 5137 (class 0 OID 16466)
+567. -- Dependencies: 228
+568. -- Data for Name: climate_device; Type: TABLE DATA; Schema: public; Owner: postgres
+569. --
+570. 
+571. COPY public.climate_device (id, name, device_id, room_id, device_type, status, power_consumption, created_at) FROM stdin;
+572. 1   Кондиціонер Samsung AC-001  1   air_conditioner off 1500    2025-12-23 08:08:43.270493
+573. 2   Осушувач    string  5   air_conditioner on  0   2025-12-23 10:10:30.430152
+574. \.
+575. 
+576. --
+577. -- TOC entry 5141 (class 0 OID 16515)
+578. -- Dependencies: 232
+579. -- Data for Name: climate_threshold; Type: TABLE DATA; Schema: public; Owner: postgres
+580. --
+581. 
+582. COPY public.climate_threshold (id, room_id, min_temperature, max_temperature, min_humidity, max_humidity, auto_control_enabled, created_at, updated_at) FROM stdin;
+583. 1   1   18  26  40  60  t   2025-12-23 08:10:58.33429   2025-12-23 08:12:06.928657
+584. \.
+585. 
+586. --
+587. -- TOC entry 5139 (class 0 OID 16489)
+588. -- Dependencies: 230
+589. -- Data for Name: device_command; Type: TABLE DATA; Schema: public; Owner: postgres
+590. --
+591. 
+592. COPY public.device_command (id, device_id, command, parameters, issued_by, issued_at, executed, executed_at) FROM stdin;
+593. 1   1   turn_on {"temperature": 22} 1   2025-12-23 08:10:16.374839  f   \N
+594. 2   2   turn_on {"additionalProp1": {}} 5   2025-12-23 10:12:06.960481  f   \N
+595. \.
+596. 
+597. --
+598. -- TOC entry 5145 (class 0 OID 16557)
+599. -- Dependencies: 236
+600. -- Data for Name: device_log; Type: TABLE DATA; Schema: public; Owner: postgres
+601. --
+602. 
+603. COPY public.device_log (id, device_id, device_type, log_level, message, metadata, "timestamp") FROM stdin;
+604. \.
+605. 
+606. --
+607. -- TOC entry 5131 (class 0 OID 16409)
+608. -- Dependencies: 222
+609. -- Data for Name: room; Type: TABLE DATA; Schema: public; Owner: postgres
+610. --
+611. 
+612. COPY public.room (id, name, description, floor, area, user_id, created_at) FROM stdin;
+613. 1   Вітальня    Головна кімната в квартирі  2   25.5    1   2025-12-23 07:56:43.955264
+614. 3   Вітальня    тест    1   100 3   2025-12-23 09:31:51.464901
+615. 5   Кухня   string  1   90  5   2025-12-23 10:05:57.025096
+616. \.
+617. 
+618. --
+619. -- TOC entry 5133 (class 0 OID 16427)
+620. -- Dependencies: 224
+621. -- Data for Name: sensor; Type: TABLE DATA; Schema: public; Owner: postgres
+622. --
+623. 
+624. COPY public.sensor (id, name, device_id, room_id, sensor_type, status, last_online, created_at) FROM stdin;
+625. 3   DHT22 Сенсор #1 DHT22-001   1   combined    active  \N  2025-12-23 08:00:07.454563
+626. 6   DHT22 Сенсор #2 DHT22-002   1   combined    active  \N  2025-12-23 08:04:35.170327
+627. 8   Сенсор 2    2   3   temperature active  \N  2025-12-23 09:32:52.751119
+628. 7   Сенсор 10   1   3   temperature active  2025-12-23 08:35:21.703593  2025-12-23 09:32:34.307534
+629. 10  Сенсор2 Сенсор2 5   temperature active  2025-12-23 09:09:25.545714  2025-12-23 10:07:38.791727
+630. \.
+631. 
+632. --
+633. -- TOC entry 5135 (class 0 OID 16450)
+634. -- Dependencies: 226
+635. -- Data for Name: sensor_reading; Type: TABLE DATA; Schema: public; Owner: postgres
+636. --
+637. 
+638. COPY public.sensor_reading (id, sensor_id, temperature, humidity, "timestamp", is_anomaly) FROM stdin;
+639. 1   3   22.5    55  2025-12-23 08:01:43.23355   f
+640. 2   7   36  100 2025-12-23 09:34:54.857 f
+641. 3   10  50  100 2025-12-23 10:09:06.824 f
+642. \.
+643. 
+644. --
+645. -- TOC entry 5129 (class 0 OID 16390)
+646. -- Dependencies: 220
+647. -- Data for Name: user; Type: TABLE DATA; Schema: public; Owner: postgres
+648. --
+649. 
+650. COPY public."user" (id, username, email, password_hash, first_name, last_name, phone_number, created_at, is_active) FROM stdin;
+651. 1   oleksandr   oleksandr@nure.ua   password123 Олександр   Юзков   +380123456789   2025-12-23 07:52:39.938091  t
+652. 2   Alex    Alex@gmail.com  $2b$12$TONvOn3wJylu/cbX026kLuodivzd091mweiNiABdu7fWSpXJcBbn6    Oleksandr   Iuzkov  +3809067899 2025-12-23 08:41:49.217888  t
+653. 3   testuser    test@example.com    $2b$12$t6bh6LTsYq7H0p9rNFBsjOeJsRI6YzKED4CrUdbOy2xp07Pg4hSXW    Alex    Iuzkov  +380999999999   2025-12-23 09:27:37.857007  t
+654. 4   Oleg    Oleg@example.com    $2b$12$Ke5vaJKcLfJH/q/RNU0fn.JsNUFrIYAHYbZwYbUquXeqZulPmtPpS    test    test    +380060070899   2025-12-23 10:00:36.453021  t
+655. 5   Test1   Test1@example.com   $2b$12$Ojwi3Qld3CdrYCCLKpHPqOSXb0b1oelg6u6hTRELT42zSGQ/Xsvs6    Oleg    Oleg    +38077788999    2025-12-23 10:03:49.342515  t
+656. \.
+657. 
+658. --
+659. -- TOC entry 5169 (class 0 OID 0)
+660. -- Dependencies: 233
+661. -- Name: alert_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+662. --
+663. 
+664. SELECT pg_catalog.setval('public.alert_id_seq', 3, true);
+665. 
+666. --
+667. -- TOC entry 5170 (class 0 OID 0)
+668. -- Dependencies: 227
+669. -- Name: climate_device_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+670. --
+671. 
+672. SELECT pg_catalog.setval('public.climate_device_id_seq', 4, true);
+673. 
+674. --
+675. -- TOC entry 5171 (class 0 OID 0)
+676. -- Dependencies: 231
+677. -- Name: climate_threshold_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+678. --
+679. 
+680. SELECT pg_catalog.setval('public.climate_threshold_id_seq', 2, true);
+681. 
+682. --
+683. -- TOC entry 5172 (class 0 OID 0)
+684. -- Dependencies: 229
+685. -- Name: device_command_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+686. --
+687. 
+688. SELECT pg_catalog.setval('public.device_command_id_seq', 2, true);
+689. 
+690. --
+691. -- TOC entry 5173 (class 0 OID 0)
+692. -- Dependencies: 235
+693. -- Name: device_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+694. --
+695. 
+696. SELECT pg_catalog.setval('public.device_log_id_seq', 1, false);
+697. 
+698. --
+699. -- TOC entry 5174 (class 0 OID 0)
+700. -- Dependencies: 221
+701. -- Name: room_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+702. --
+703. 
+704. SELECT pg_catalog.setval('public.room_id_seq', 5, true);
+705. 
+706. --
+707. -- TOC entry 5175 (class 0 OID 0)
+708. -- Dependencies: 223
+709. -- Name: sensor_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+710. --
+711. 
+712. SELECT pg_catalog.setval('public.sensor_id_seq', 10, true);
+713. 
+714. --
+715. -- TOC entry 5176 (class 0 OID 0)
+716. -- Dependencies: 225
+717. -- Name: sensor_reading_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+718. --
+719. 
+720. SELECT pg_catalog.setval('public.sensor_reading_id_seq', 3, true);
+721. 
+722. --
+723. -- TOC entry 5177 (class 0 OID 0)
+724. -- Dependencies: 219
+725. -- Name: user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+726. --
+727. 
+728. SELECT pg_catalog.setval('public.user_id_seq', 5, true);
+729. 
+730. --
+731. -- TOC entry 4966 (class 2606 OID 16550)
+732. -- Name: alert alert_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+733. --
+734. 
+735. ALTER TABLE ONLY public.alert
+736.     ADD CONSTRAINT alert_pkey PRIMARY KEY (id);
+737. 
+738. --
+739. -- TOC entry 4953 (class 2606 OID 16482)
+740. -- Name: climate_device climate_device_device_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+741. --
+742. 
+743. ALTER TABLE ONLY public.climate_device
+744.     ADD CONSTRAINT climate_device_device_id_key UNIQUE (device_id);
+745. 
+746. --
+747. -- TOC entry 4955 (class 2606 OID 16480)
+748. -- Name: climate_device climate_device_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+749. --
+750. 
+751. ALTER TABLE ONLY public.climate_device
+752.     ADD CONSTRAINT climate_device_pkey PRIMARY KEY (id);
+753. 
+754. --
+755. -- TOC entry 4962 (class 2606 OID 16525)
+756. -- Name: climate_threshold climate_threshold_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+757. --
+758. 
+759. ALTER TABLE ONLY public.climate_threshold
+760.     ADD CONSTRAINT climate_threshold_pkey PRIMARY KEY (id);
+761. 
+762. --
+763. -- TOC entry 4964 (class 2606 OID 16527)
+764. -- Name: climate_threshold climate_threshold_room_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+765. --
+766. 
+767. ALTER TABLE ONLY public.climate_threshold
+768.     ADD CONSTRAINT climate_threshold_room_id_key UNIQUE (room_id);
+769. 
+770. --
+771. -- TOC entry 4958 (class 2606 OID 16503)
+772. -- Name: device_command device_command_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+773. --
+774. 
+775. ALTER TABLE ONLY public.device_command
+776.     ADD CONSTRAINT device_command_pkey PRIMARY KEY (id);
+777. 
+778. --
+779. -- TOC entry 4970 (class 2606 OID 16572)
+780. -- Name: device_log device_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+781. --
+782. 
+783. ALTER TABLE ONLY public.device_log
+784.     ADD CONSTRAINT device_log_pkey PRIMARY KEY (id);
+785. 
+786. --
+787. -- TOC entry 4942 (class 2606 OID 16420)
+788. -- Name: room room_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+789. --
+790. 
+791. ALTER TABLE ONLY public.room
+792.     ADD CONSTRAINT room_pkey PRIMARY KEY (id);
+793. 
+794. --
+795. -- TOC entry 4945 (class 2606 OID 16443)
+796. -- Name: sensor sensor_device_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+797. --
+798. 
+799. ALTER TABLE ONLY public.sensor
+800.     ADD CONSTRAINT sensor_device_id_key UNIQUE (device_id);
+801. 
+802. --
+803. -- TOC entry 4947 (class 2606 OID 16441)
+804. -- Name: sensor sensor_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+805. --
+806. 
+807. ALTER TABLE ONLY public.sensor
+808.     ADD CONSTRAINT sensor_pkey PRIMARY KEY (id);
+809. 
+810. --
+811. -- TOC entry 4951 (class 2606 OID 16459)
+812. -- Name: sensor_reading sensor_reading_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+813. --
+814. 
+815. ALTER TABLE ONLY public.sensor_reading
+816.     ADD CONSTRAINT sensor_reading_pkey PRIMARY KEY (id);
+817. 
+818. --
+819. -- TOC entry 4935 (class 2606 OID 16407)
+820. -- Name: user user_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+821. --
+822. 
+823. ALTER TABLE ONLY public."user"
+824.     ADD CONSTRAINT user_email_key UNIQUE (email);
+825. 
+826. --
+827. -- TOC entry 4937 (class 2606 OID 16403)
+828. -- Name: user user_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+829. --
+830. 
+831. ALTER TABLE ONLY public."user"
+832.     ADD CONSTRAINT user_pkey PRIMARY KEY (id);
+833. 
+834. --
+835. -- TOC entry 4939 (class 2606 OID 16405)
+836. -- Name: user user_username_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+837. --
+838. 
+839. ALTER TABLE ONLY public."user"
+840.     ADD CONSTRAINT user_username_key UNIQUE (username);
+841. 
+842. --
+843. -- TOC entry 4967 (class 1259 OID 16581)
+844. -- Name: idx_alert_is_read; Type: INDEX; Schema: public; Owner: postgres
+845. --
+846. 
+847. CREATE INDEX idx_alert_is_read ON public.alert USING btree (is_read);
+848. 
+849. --
+850. -- TOC entry 4968 (class 1259 OID 16580)
+851. -- Name: idx_alert_room_id; Type: INDEX; Schema: public; Owner: postgres
+852. --
+853. 
+854. CREATE INDEX idx_alert_room_id ON public.alert USING btree (room_id);
+855. 
+856. --
+857. -- TOC entry 4956 (class 1259 OID 16577)
+858. -- Name: idx_climate_device_room_id; Type: INDEX; Schema: public; Owner: postgres
+859. --
+860. 
+861. CREATE INDEX idx_climate_device_room_id ON public.climate_device USING btree (room_id);
+862. 
+863. --
+864. -- TOC entry 4959 (class 1259 OID 16578)
+865. -- Name: idx_device_command_device_id; Type: INDEX; Schema: public; Owner: postgres
+866. --
+867. 
+868. CREATE INDEX idx_device_command_device_id ON public.device_command USING btree (device_id);
+869. 
+870. --
+871. -- TOC entry 4960 (class 1259 OID 16579)
+872. -- Name: idx_device_command_issued_by; Type: INDEX; Schema: public; Owner: postgres
+873. --
+874. 
+875. CREATE INDEX idx_device_command_issued_by ON public.device_command USING btree (issued_by);
+876. 
+877. --
+878. -- TOC entry 4971 (class 1259 OID 16582)
+879. -- Name: idx_device_log_timestamp; Type: INDEX; Schema: public; Owner: postgres
+880. --
+881. 
+882. CREATE INDEX idx_device_log_timestamp ON public.device_log USING btree ("timestamp");
+883. 
+884. --
+885. -- TOC entry 4940 (class 1259 OID 16573)
+886. -- Name: idx_room_user_id; Type: INDEX; Schema: public; Owner: postgres
+887. --
+888. 
+889. CREATE INDEX idx_room_user_id ON public.room USING btree (user_id);
+890. 
+891. --
+892. -- TOC entry 4948 (class 1259 OID 16575)
+893. -- Name: idx_sensor_reading_sensor_id; Type: INDEX; Schema: public; Owner: postgres
+894. --
+895. 
+896. CREATE INDEX idx_sensor_reading_sensor_id ON public.sensor_reading USING btree (sensor_id);
+897. 
+898. --
+899. -- TOC entry 4949 (class 1259 OID 16576)
+900. -- Name: idx_sensor_reading_timestamp; Type: INDEX; Schema: public; Owner: postgres
+901. --
+902. 
+903. CREATE INDEX idx_sensor_reading_timestamp ON public.sensor_reading USING btree ("timestamp");
+904. 
+905. --
+906. -- TOC entry 4943 (class 1259 OID 16574)
+907. -- Name: idx_sensor_room_id; Type: INDEX; Schema: public; Owner: postgres
+908. --
+909. 
+910. CREATE INDEX idx_sensor_room_id ON public.sensor USING btree (room_id);
+911. 
+912. --
+913. -- TOC entry 4980 (class 2620 OID 16584)
+914. -- Name: climate_threshold update_climate_threshold_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+915. --
+916. 
+917. CREATE TRIGGER update_climate_threshold_updated_at BEFORE UPDATE ON public.climate_threshold FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+918. 
+919. --
+920. -- TOC entry 4979 (class 2606 OID 16551)
+921. -- Name: alert alert_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+922. --
+923. 
+924. ALTER TABLE ONLY public.alert
+925.     ADD CONSTRAINT alert_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.room(id) ON DELETE CASCADE;
+926. 
+927. --
+928. -- TOC entry 4975 (class 2606 OID 16483)
+929. -- Name: climate_device climate_device_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+930. --
+931. 
+932. ALTER TABLE ONLY public.climate_device
+933.     ADD CONSTRAINT climate_device_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.room(id) ON DELETE CASCADE;
+934. 
+935. --
+936. -- TOC entry 4978 (class 2606 OID 16528)
+937. -- Name: climate_threshold climate_threshold_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+938. --
+939. 
+940. ALTER TABLE ONLY public.climate_threshold
+941.     ADD CONSTRAINT climate_threshold_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.room(id) ON DELETE CASCADE;
+942. 
+943. --
+944. -- TOC entry 4976 (class 2606 OID 16504)
+945. -- Name: device_command device_command_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+946. --
+947. 
+948. ALTER TABLE ONLY public.device_command
+949.     ADD CONSTRAINT device_command_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.climate_device(id) ON DELETE CASCADE;
+950. 
+951. --
+952. -- TOC entry 4977 (class 2606 OID 16509)
+953. -- Name: device_command device_command_issued_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+954. --
+955. 
+956. ALTER TABLE ONLY public.device_command
+957.     ADD CONSTRAINT device_command_issued_by_fkey FOREIGN KEY (issued_by) REFERENCES public."user"(id) ON DELETE CASCADE;
+958. 
+959. --
+960. -- TOC entry 4972 (class 2606 OID 16421)
+961. -- Name: room room_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+962. --
+963. 
+964. ALTER TABLE ONLY public.room
+965.     ADD CONSTRAINT room_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+966. 
+967. --
+968. -- TOC entry 4974 (class 2606 OID 16460)
+969. -- Name: sensor_reading sensor_reading_sensor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+970. --
+971. 
+972. ALTER TABLE ONLY public.sensor_reading
+973.     ADD CONSTRAINT sensor_reading_sensor_id_fkey FOREIGN KEY (sensor_id) REFERENCES public.sensor(id) ON DELETE CASCADE;
+974. 
+975. --
+976. -- TOC entry 4973 (class 2606 OID 16444)
+977. -- Name: sensor sensor_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+978. --
+979. 
+980. ALTER TABLE ONLY public.sensor
+981.     ADD CONSTRAINT sensor_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.room(id) ON DELETE CASCADE;
+982. 
+983. -- Completed on 2025-12-23 10:23:11
+984. 
+985. --
+986. -- PostgreSQL database dump complete
+987. --
+988. 
+989. \unrestrict bsg3aUH3sjavr17cNPAehVsM5HQw1lflbm4gP2DdWuyBNfblRf81OVRlaT22bLf
+
+
+2
+
+
+
+
+
+
+
+
+
+
