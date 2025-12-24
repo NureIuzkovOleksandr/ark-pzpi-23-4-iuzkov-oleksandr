@@ -21,7 +21,7 @@ DATABASE_URL = os.getenv(
 # Створення engine для підключення до PostgreSQL
 engine = create_engine(
     DATABASE_URL,
-    echo=True,  # Виводить SQL запити в консоль (для розробки)
+    echo=True,  # Виводить SQL запити в консоль
     pool_pre_ping=True,  # Перевірка з'єднання перед використанням
     pool_size=10,  # Розмір пулу з'єднань
     max_overflow=20  # Максимальна кількість додаткових з'єднань
@@ -55,18 +55,10 @@ def create_tables():
     """
     Створює всі таблиці в БД на основі моделей SQLAlchemy
     Викликається при запуску додатку
-    
-    УВАГА: Якщо таблиці вже створені вручну через SQL скрипт,
-    закоментуйте рядок нижче щоб уникнути конфліктів
     """
-    # Base.metadata.create_all(bind=engine)  # Закоментовано - таблиці вже існують
-    print("✅ Using existing PostgreSQL tables")
+    print("Using existing PostgreSQL tables")
 
 
-# Функція для видалення всіх таблиць (для розробки)
+# Функція для видалення всіх таблиць
 def drop_tables():
-    """
-    Видаляє всі таблиці з БД
-    УВАГА: Використовувати тільки під час розробки!
-    """
     Base.metadata.drop_all(bind=engine)
