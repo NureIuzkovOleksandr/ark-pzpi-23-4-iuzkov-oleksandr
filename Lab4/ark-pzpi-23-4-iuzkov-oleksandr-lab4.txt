@@ -1,0 +1,736 @@
+﻿Харківський національний університет радіоелектроніки
+Факультет комп’ютерних наук
+Катедра програмної інженерії
+
+
+Звіт
+з лабораторної роботи № 4
+з дисципліни «Аналіз та рефакторинг коду»
+на тему «Розробка бізнес логіки та функцій налаштування IoT клієнта»
+
+
+
+
+    Виконав:                                                                           Перевірив:
+ст. гр. ПЗПІ-23-4                                                              ст. викладач кафедри ПІ
+Юзков Олександр                                            	         Сокорчук Ігор Петрович
+
+
+
+Харків 2025
+1 ІСТОРІЯ ЗМІН
+
+№ДатаВерсія звітуОпис змін та виправлень125.12.20250.1Зроблено звіт
+2 ЗАВДАННЯ
+     Метою лабораторної роботи є створення програмного забезпечення для IoT-пристрою на базі платформи для вбудованих систем з реалізацією розширеного функціоналу згідно з концепцією Інтернету речей. Робота передбачає інтеграцію пристрою з іншими компонентами системи через сучасні протоколи передачі даних та отримання практичного досвіду у проєктуванні і програмуванні вбудованих систем.
+3 ОПИС ВИКОНАНОЇ РОБОТИ
+     Темою проєкту для виконання лабораторних робіт є програмна система моніторингу та контролю мікроклімату в приміщеннях.
+     IoT-клієнт Smart Climate Monitor – це програмне забезпечення на базі ESP32, яке працює на фізичному пристрої автоматичного моніторингу та регулювання мікроклімату та забезпечує:
+* Зчитування даних з сенсорів (DHT22 для температури та вологості)
+* Виконання команд управління кліматом через серво-привід (імітація кондиціонера: обігрів, охолодження, вимкнення)
+* Локальну перевірку аномалій клімату з сигналізацією через LED-індикатор
+* Передачу телеметрії на сервер через HTTP API
+* Підтримку стабільного WiFi з'єднання (Wokwi-GUEST)
+* Динамічне оновлення порогових значень температури та вологості з сервера
+* Автоматичне регулювання клімату на основі отриманих даних
+IoT-клієнт взаємодіє із FastAPI сервером, який зберігає дані у БД та обробляє показання сенсорів. Пристрій використовує RESTful API endpoints для обробки показань сенсорів, отримання порогових значень для конкретного приміщення, та синхронізації параметрів системи. Система підтримує періодичну передачу даних та автоматичне відновлення з'єднання при втраті зв'язку з сервером. Загальна схема взаємодії зображена на рисунку 3.1.
+
+
+Рисунок 3.1 - Схема взаємодії IoT пристроїв з серверною частиною
+
+     Модуль абстракції сенсорів у програмному забезпеченні пристрою реалізує уніфікований доступ до апаратних датчиків незалежно від особливостей їх реалізації. У даній системі модуль забезпечує ініціалізацію та зчитування показників температури й вологості з цифрового сенсора DHT22. Отримані значення проходять базову перевірку коректності, зокрема контроль на наявність помилкових або некоректних вимірювань. У разі виявлення недійсних даних система активує червоний LED-індикатор та пропускає цикл відправки, що дозволяє забезпечити стабільну роботу пристрою та уникнути збоїв під час подальшої обробки або передачі інформації.
+     Модуль збору даних відповідає за періодичне отримання вимірювальних даних із сенсорів та формування телеметричної інформації. Збір показників здійснюється з використанням програмних таймерів на основі системного лічильника часу millis(), що дозволяє виконувати опитування без блокування основного циклу роботи пристрою. До складу зібраних даних входять значення температури та вологості, які упаковуються у JSON-формат для подальшої передачі. Сформовані телеметричні структури використовуються для відправки на сервер та визначення необхідності корекції мікроклімату приміщення.
+     Модуль обробки даних реалізує логіку аналізу зібраної інформації та прийняття рішень на основі поточного стану системи. Він відповідає за виявлення кліматичних аномалій шляхом порівняння отриманих показників з пороговими значеннями мінімальної та максимальної температури і вологості. Обробка даних включає локальну перевірку аномалій з активацією LED-індикатора та формування команд керування кліматом. На основі результатів аналізу система визначає необхідний режим роботи кондиціонера (обігрів, охолодження або вимкнення) та отримує від сервера інформацію про виконані автоматичні команди та створені сповіщення.
+     Модуль мережевої взаємодії забезпечує обмін даними між пристроєм на базі ESP32 та серверною частиною системи. Передача інформації реалізована з використанням протоколу HTTP/REST поверх бездротового з'єднання Wi-Fi. Модуль відповідає за встановлення та підтримання мережевого з'єднання, формування JSON-повідомлень, відправлення телеметрії з показниками сенсорів та отримання порогових значень для конкретного приміщення. Модуль підтримує два основні API endpoints: POST-запит для обробки показань сенсорів та GET-запит для отримання актуальних порогових значень. У разі виникнення помилок з'єднання система виконує автоматичне перепідключення до WiFi-мережі.
+     Модуль керування пристроєм відповідає за централізоване управління станами роботи системи моніторингу та координацію взаємодії між окремими компонентами. Він реалізує логіку автоматичного регулювання мікроклімату на основі отриманих даних та динамічно оновлюваних порогових значень з сервера. Модуль забезпечує керування виконавчими елементами пристрою, зокрема сервоприводом (імітація кондиціонера з трьома режимами: 90° для обігріву, 180° для охолодження, 0° для вимкнення) та світлодіодним індикатором для сигналізації аномалій. Усі показання сенсорів та результати їх обробки логуються в Serial Monitor для моніторингу роботи системи.
+
+Рисунок 3.2 - UML діаграма прецедентів
+     Створимо UML діаграму діяльності для IoT-клієнта Smart Climate Monitor, яка відображає основні дії IoT-клієнта, такі як процес підключення до WiFi мережі, періодичне зчитування даних з сенсора DHT22 (температура та вологість), технічну валідацію отриманих показників на наявність помилкових вимірювань (перевірка NaN-значень), локальну обробку даних з виявленням кліматичних аномалій шляхом порівняння з пороговими значеннями, передачу телеметрії на FastAPI сервер через HTTP REST API endpoints (POST для обробки показань, GET для отримання порогів), автоматичне керування виконавчими механізмами (серво-привід кондиціонера з трьома режимами роботи), а також оновлення стану пристрою (червоний LED-індикатор для сигналізації аномалій, логування в Serial Monitor). Діаграма ілюструє безперервний цикл роботи пристрою з використанням неблокуючих таймерів, можливістю динамічного оновлення порогових значень з сервера та автоматичного відновлення WiFi-з'єднання при його втраті. (див. рис. 1.3).
+
+Рисунок 3.3 - UML діаграма діяльності
+
+     Підключення бібліотек та оголошення PIN конфігурації
+     Підключаємо необхідні бібліотеки для роботи з WiFi, HTTP-клієнтом, сенсором DHT22, JSON та серво-мотором. Оголошуємо піни для DHT22 сенсора, червоного LED-індикатора та серво-приводу кондиціонера. Відноситься до модулів Sensor Abstraction Layer та Device Management Module.
+   1. #include <Arduino.h>
+   2. #include <DHT.h>
+   3. #include <ESP32Servo.h>
+   4. #include <WiFi.h>
+   5. #include <HTTPClient.h>
+   6. #include <ArduinoJson.h>
+
+   7. // Forward declarations
+   8. void connectWiFi();
+   9. void sendDataToServer(float temp, float humidity);
+   10. void handleClimateControl(float temp, float humidity);
+   11. void checkLocalAnomalies(float temp, float humidity);
+   12. void updateThresholds();
+
+   13. // Піни
+   14. #define DHT_PIN 15
+   15. #define LED_RED 2
+   16. #define SERVO_PIN 4
+   17. #define DHT_TYPE DHT22
+Ініціалізація об'єктів периферії
+Створюємо об'єкти для роботи з сенсором температури/вологості DHT22 та серво-мотором кондиціонера. Відноситься до модулів Output Control Module та Sensor Abstraction Layer.
+   18. DHT dht(DHT_PIN, DHT_TYPE);
+   19. Servo climateServo;  
+
+	Конфігурація WiFi та Server endpoints Оголошуємо статичні параметри WiFi мережі (SSID та пароль) та базову URL FastAPI серверу. Формуємо повні URL для REST endpoints: process (обробка показань) та thresholds (отримання порогів). Відноситься до модуля Network Communication Module.
+
+   20. // WiFi налаштування
+   21. const char* ssid = "Wokwi-GUEST";
+   22. const char* password = "";
+
+   23. // API налаштування
+   24. String baseUrl = "http://192.168.1.10:8000";
+   25. String processUrl = baseUrl + "/api/sensors/" + String(20) + "/readings/process";
+   26. String thresholdsUrl = baseUrl + "/api/climate-thresholds/room/" + String(7);	
+
+	Оголошуємо ідентифікаційні параметри пристрою: sensorId (ідентифікатор сенсора) та roomId (ідентифікатор приміщення). Відноситься до модуля Device Management Module.
+   27. int sensorId = 20;
+   28. int roomId = 7;	
+	Оголошуємо змінні для зберігання порогових значень температури та вологості, які динамічно оновлюються з сервера. Початкові значення: температура 18-26°C, вологість 30-70%. Відноситься до модуля Data Processing Module.
+   29. // Пороги
+   30. float TEMP_MIN = 18.0;
+   31. float TEMP_MAX = 26.0;
+   32. float HUMIDITY_MIN = 30.0;
+   33. float HUMIDITY_MAX = 70.0;	
+
+	Оголошуємо змінні для відстеження часу: lastSendTime (остання відправка даних), lastThresholdUpdate (останнє оновлення порогів). Визначаємо константи інтервалів: 10 секунд для відправки даних та оновлення порогів. Відноситься до модуля Device Management Module.
+
+   34. // Таймери
+   35. unsigned long lastSendTime = 0;
+   36. unsigned long lastThresholdUpdate = 0;
+   37. const unsigned long sendInterval = 10000;
+   38. const unsigned long thresholdUpdateInterval = 10000;
+	
+	Функція підключення до WiFi
+	Реалізує підключення до WiFi мережі з перевіркою статусу (максимум 20 спроб по 500мс). Виводить інформацію про IP адресу та силу сигналу в Serial Monitor. При невдачі виводить повідомлення про помилку. Відноситься до модуля Network Communication Module.
+   39. void connectWiFi() {
+   40. Serial.println("\nПідключення до WiFi...");
+   41. Serial.print("SSID: ");
+   42. Serial.println(ssid);
+  
+   43. if (strlen(password) == 0) {
+   44. Serial.println("Відкрита мережа");
+   45. WiFi.begin(ssid);
+   46. } else {
+   47. Serial.println("Захищена мережа");
+   48. WiFi.begin(ssid, password);
+   49. }
+  
+   50. int attempts = 0;
+   51. while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+   52. delay(500);
+   53. Serial.print(".");
+   54. attempts++;
+   55. }
+  
+   56. if (WiFi.status() == WL_CONNECTED) {
+   57. Serial.println("\nWiFi підключено!");
+   58. Serial.print("IP адреса: ");
+   59. Serial.println(WiFi.localIP());
+   60. Serial.print("Сигнал: ");
+   61. Serial.print(WiFi.RSSI());
+   62. Serial.println(" dBm");
+   63. } else {
+   64. Serial.println("\nПомилка підключення WiFi");
+   65. }
+   66. }
+
+	Функція оновлення порогових значень
+	Відправляє HTTP GET запит на /api/climate-thresholds/room/{roomId} для отримання актуальних порогових значень температури та вологості з сервера. Парсить JSON відповідь та оновлює глобальні змінні TEMP_MIN, TEMP_MAX, HUMIDITY_MIN, HUMIDITY_MAX. Відноситься до модулів Network Communication Module та Data Processing Module.
+
+   67. /* void updateThresholds() {
+   68. if (WiFi.status() != WL_CONNECTED) {
+   69. Serial.println("WiFi не підключено для оновлення порогів");
+   70. return;
+   71. }
+
+   72. HTTPClient http;
+   73. http.begin(thresholdsUrl);
+   74. http.setTimeout(5000);
+  
+   75. int httpCode = http.GET();
+  
+   76. if (httpCode == 200) {
+   77. String response = http.getString();
+     
+   78. StaticJsonDocument<512> doc;
+   79. DeserializationError error = deserializeJson(doc, response);
+     
+   80. if (!error) {
+   81. TEMP_MIN = doc["min_temperature"] | 18.0;
+   82. TEMP_MAX = doc["max_temperature"] | 26.0;
+   83. HUMIDITY_MIN = doc["min_humidity"] | 30.0;
+   84. HUMIDITY_MAX = doc["max_humidity"] | 70.0;
+       
+   85. Serial.println("\nПороги оновлено з сервера:");
+   86. Serial.print("Температура: ");
+   87. Serial.print(TEMP_MIN);
+   88. Serial.print(" - ");
+   89. Serial.println(TEMP_MAX);
+   90. Serial.print("Вологість: ");
+   91. Serial.print(HUMIDITY_MIN);
+   92. Serial.print(" - ");
+   93. Serial.println(HUMIDITY_MAX);
+   94. }
+   95. } else {
+   96. Serial.print("Помилка отримання порогів: ");
+   97. Serial.println(httpCode);
+   98. }
+  
+   99. http.end();
+   100. }
+
+	Функція відправки даних на сервер
+	Відправляє HTTP POST запит на /api/sensors/{sensorId}/readings/process з показниками температури та вологості у JSON форматі. Парсить відповідь сервера, отримує інформацію про виявлені аномалії, кількість виконаних команд та створених сповіщень. Викликає функцію handleClimateControl() для регулювання кондиціонера. Відноситься до модулів Network Communication Module та Data Collection Module.
+
+   101. void sendDataToServer(float temp, float humidity) {
+   102. if (WiFi.status() != WL_CONNECTED) {
+   103. Serial.println("WiFi не підключено");
+   104. return;
+   105. }
+
+   106. HTTPClient http;
+  
+   107. http.begin(processUrl);
+   108. http.addHeader("Content-Type", "application/json");
+  
+   109. StaticJsonDocument<200> doc;
+   110. if (!isnan(temp)) doc["temperature"] = temp;
+   111. if (!isnan(humidity)) doc["humidity"] = humidity;
+  
+   112. String jsonData;
+   113. serializeJson(doc, jsonData);
+  
+   114. Serial.println("\nВідправка даних на сервер:");
+   115. Serial.println(processUrl);
+   116. Serial.println(jsonData);
+  
+   117. int httpCode = http.POST(jsonData);
+  
+   118. if (httpCode > 0) {
+   119. Serial.print("HTTP код відповіді: ");
+   120. Serial.println(httpCode);
+     
+   121. if (httpCode == 200) {
+   122. String response = http.getString();
+   123. Serial.println("Відповідь сервера:");
+   124. Serial.println(response);
+       
+   125. StaticJsonDocument<1024> responseDoc;
+   126. DeserializationError error = deserializeJson(responseDoc, response);
+       
+   127. if (!error) {
+   128. bool success = responseDoc["success"];
+   129. bool isAnomaly = responseDoc["is_anomaly"];
+   130. int commandsExecuted = responseDoc["commands_executed"];
+   131. int alertsCreated = responseDoc["alerts_created"];
+         
+   132. Serial.println("\nРезультат обробки:");
+   133. Serial.print("Успіх: ");
+   134. Serial.println(success ? "ТАК" : "НІ");
+   135. Serial.print("Аномалія: ");
+   136. Serial.println(isAnomaly ? "ТАК" : "НІ");
+   137. Serial.print("Команд виконано: ");
+   138. Serial.println(commandsExecuted);
+   139. Serial.print("Сповіщень створено: ");
+   140. Serial.println(alertsCreated);
+         
+   141. handleClimateControl(temp, humidity);
+   142. }
+   143. }
+   144. } else {
+   145. Serial.print("Помилка HTTP: ");
+   146. Serial.println(http.errorToString(httpCode));
+   147. }
+  
+   148. http.end();
+   149. }	
+
+	Функція керування кліматом
+	Реалізує логіку автоматичного управління кондиціонером на основі поточних показників температури та вологості. Порівнює значення з пороговими та керує серво-приводом: 90° для обігріву (якщо холодно/сухо), 180° для охолодження (якщо жарко/волого), 0° при нормальних умовах. Відноситься до модуля Output Control Module.
+
+   150. void handleClimateControl(float temp, float humidity) {
+   151. Serial.println("\nУправління кліматом:");
+  
+   152. if (temp < TEMP_MIN || humidity < HUMIDITY_MIN) {
+   153. Serial.println("УВІМКНУТИ обігрів");
+   154. Serial.println("Сервопривод -> 90°");
+   155. climateServo.write(90);
+   156. } else if (temp > TEMP_MAX || humidity > HUMIDITY_MAX) {
+   157. Serial.println("УВІМКНУТИ охолодження");
+   158. Serial.println("Сервопривод -> 180°");
+   159. climateServo.write(180);
+   160. } else {
+   161. Serial.println("Клімат в нормі");
+   162. Serial.println("Сервопривод -> 0°");
+   163. climateServo.write(0);
+   164. }
+   165. }	
+
+	Функція локальної перевірки аномалій
+	Перевіряє показники температури та вологості на відповідність пороговим значенням. При виявленні відхилень від норми виводить повідомлення в Serial Monitor та вмикає червоний LED-індикатор. При нормальних умовах LED вимикається. Відноситься до модуля Data Processing Module.
+   166. void checkLocalAnomalies(float temp, float humidity) {
+   167. bool anomaly = false;
+  
+   168. if (!isnan(temp) && (temp < TEMP_MIN || temp > TEMP_MAX)) {
+   169. Serial.print("ЛОКАЛЬНА АНОМАЛІЯ: Температура ");
+   170. Serial.print(temp);
+   171. Serial.println("°C поза нормою");
+   172. anomaly = true;
+   173. }
+  
+   174. if (!isnan(humidity) && (humidity < HUMIDITY_MIN || humidity > HUMIDITY_MAX)) {
+   175. Serial.print("ЛОКАЛЬНА АНОМАЛІЯ: Вологість ");
+   176. Serial.print(humidity);
+   177. Serial.println("% поза нормою");
+   178. anomaly = true;
+   179. }
+  
+   180. digitalWrite(LED_RED, anomaly ? HIGH : LOW);
+   181. Serial.print("Червоний світлодіод: ");
+   182. Serial.println(anomaly ? "УВІМКНЕНО" : "ВИМКНЕНО");
+   183. }
+
+	Функція setup() - ініціалізація пристрою
+	Ініціалізує Serial порт для виведення діагностичної інформації. Налаштовує піни LED-індикатора як вихід. Ініціалізує DHT22 сенсор та серво-привід кондиціонера з початковим положенням 0°. Підключається до WiFi мережі. При успішному підключенні завантажує початкові порогові значення з сервера. Відноситься до модулів Device Management Module, Network Communication Module та Output Control Module.
+
+   184. void setup() {
+   185. Serial.begin(115200);
+   186. delay(1000);
+  
+   187. Serial.println("\n╔════════════════════════════════════════╗");
+   188. Serial.println("║   IoT Climate Monitor - ESP32          ║");
+   189. Serial.println("║   Інтеграція з FastAPI Backend        ║");
+   190. Serial.println("╚════════════════════════════════════════╝");
+  
+   191. pinMode(LED_RED, OUTPUT);
+   192. digitalWrite(LED_RED, LOW);
+  
+   193. dht.begin();
+  
+   194. climateServo.attach(SERVO_PIN);
+   195. climateServo.write(0);
+  
+   196. Serial.println("\nКомпоненти ініціалізовано");
+  
+   197. connectWiFi();
+  
+   198. if (WiFi.status() == WL_CONNECTED) {
+   199. updateThresholds();
+   200. }
+  
+   201. Serial.println("\nСистема готова до роботи!");
+   202. Serial.print("Base URL: ");
+   203. Serial.println(baseUrl);
+   204. Serial.print("Sensor ID: ");
+   205. Serial.println(sensorId);
+   206. Serial.println("════════════════════════════════════════\n");
+   207. }
+
+	Функція loop() - головний цикл
+	Реалізує безперервний цикл роботи пристрою з використанням неблокуючих таймерів на основі millis(). Кожні 10 секунд оновлює порогові значення з сервера, зчитує дані з DHT22, перевіряє на валідність, виявляє локальні аномалії, відправляє телеметрію на сервер. При втраті WiFi з'єднання автоматично виконує перепідключення. Відноситься до модулів State Processing Module та Sensor Abstraction Layer.
+
+   208. void loop() {
+   209. unsigned long currentTime = millis();
+  
+   210. if (currentTime - lastThresholdUpdate >= thresholdUpdateInterval) {
+   211. lastThresholdUpdate = currentTime;
+   212. updateThresholds();
+   213. }
+  
+   214. if (currentTime - lastSendTime >= sendInterval) {
+   215. lastSendTime = currentTime;
+     
+   216. Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+   217. Serial.println("Новий цикл зчитування");
+     
+   218. float temp = dht.readTemperature();
+   219. float humidity = dht.readHumidity();
+     
+   220. if (isnan(temp) || isnan(humidity)) {
+   221. Serial.println("Помилка читання DHT22!");
+   222. digitalWrite(LED_RED, HIGH);
+   223. return;
+   224. }
+     
+   225. Serial.print("Температура: ");
+   226. Serial.print(temp);
+   227. Serial.println(" °C");
+   228. Serial.print("Вологість: ");
+   229. Serial.print(humidity);
+   230. Serial.println(" %");
+     
+   231. checkLocalAnomalies(temp, humidity);
+   232. sendDataToServer(temp, humidity);
+     
+   233. Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+   234. }
+  
+   235. if (WiFi.status() != WL_CONNECTED) {
+   236. Serial.println("\nWiFi відключено, спроба перепідключення...");
+   237. connectWiFi();
+   238. }
+  
+   239. delay(100);
+   240. }
+
+
+
+
+
+
+4 ВИСНОВКИ
+     В результаті виконання лабораторної роботи №4 створено програмне забезпечення для SmartDevice пристрою Smart Climate Monitor, побудованого на базі платформи для вбудованих систем ESP32. Впроваджено комплексний функціонал автоматизованого контролю та регулювання мікроклімату, що відповідає принципам концепції Інтернету речей. Налагоджено комунікацію пристрою з іншими елементами програмної екосистеми через використання актуальних протоколів передачі даних HTTP/REST та WiFi. Під час виконання завдання поглиблено теоретичне розуміння та отримано практичний досвід у галузі створення програмних рішень для вбудованих систем, а також у сфері розробки IoT-архітектури та налаштування інтеграції компонентів у рамках цілісної розподіленої системи моніторингу та управління.
+5 ВИКОРИСТАНІ ДЖЕРЕЛА
+1. Wokwi - World's most advanced ESP32 Simulator. Wokwi - World's most advanced ESP32 Simulator. URL: https://wokwi.com/ (дата звернення: 25.12.2025).
+2. Методичні вказівки до лабораторних робіт з дисципліни «Аналіз та рефакторинг коду програмного забезпечення» (дата звернення: 25.10.2025).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ДОДАТОК А
+Відеозапис
+Відеозапис презентації результатів лабораторної роботи: https://youtu.be/JLehRHBmcUk
+Хронологічний опис відеозапису:
+00:00 – Вступ 
+00:15 – Опис виконаної роботи
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ДОДАТОК В
+Програмний код
+GitHub репозиторій: https://github.com/NureIuzkovOleksandr/ark-pzpi-23-4-iuzkov-oleksandr/tree/main/Lab4/ark-pzpi-23-4-iuzkov-oleksandr-lab4
+В.1 Код для IoT пристрою.
+1. #include <Arduino.h>
+2. #include <DHT.h>
+3. #include <ESP32Servo.h>
+4. #include <WiFi.h>
+5. #include <HTTPClient.h>
+6. #include <ArduinoJson.h>
+7. 
+8. // Forward declarations
+9. void connectWiFi();
+10. void sendDataToServer(float temp, float humidity);
+11. void handleClimateControl(float temp, float humidity);
+12. void checkLocalAnomalies(float temp, float humidity);
+13. void updateThresholds();
+14. 
+15. // WiFi налаштування
+16. const char* ssid = "Wokwi-GUEST";
+17. const char* password = "";
+18. 
+19. // API налаштування
+20. String baseUrl = "http://192.168.1.10:8000";
+21. String processUrl = baseUrl + "/api/sensors/" + String(20) + "/readings/process";
+22. String thresholdsUrl = baseUrl + "/api/climate-thresholds/room/" + String(7);
+23. 
+24. int sensorId = 20;
+25. int roomId = 7;
+26. 
+27. // Піни
+28. #define DHT_PIN 15
+29. #define LED_RED 2
+30. #define SERVO_PIN 4
+31. #define DHT_TYPE DHT22
+32. 
+33. DHT dht(DHT_PIN, DHT_TYPE);
+34. Servo climateServo;
+35. 
+36. // Пороги
+37. float TEMP_MIN = 18.0;
+38. float TEMP_MAX = 26.0;
+39. float HUMIDITY_MIN = 30.0;
+40. float HUMIDITY_MAX = 70.0;
+41. 
+42. // Таймери
+43. unsigned long lastSendTime = 0;
+44. unsigned long lastThresholdUpdate = 0;
+45. const unsigned long sendInterval = 10000;
+46. const unsigned long thresholdUpdateInterval = 10000;
+47. 
+48. void connectWiFi() {
+49.   Serial.println("\nПідключення до WiFi...");
+50.   Serial.print("SSID: ");
+51.   Serial.println(ssid);
+52.   
+53.   if (strlen(password) == 0) {
+54.     Serial.println("Відкрита мережа");
+55.     WiFi.begin(ssid);
+56.   } else {
+57.     Serial.println("Захищена мережа");
+58.     WiFi.begin(ssid, password);
+59.   }
+60.   
+61.   int attempts = 0;
+62.   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+63.     delay(500);
+64.     Serial.print(".");
+65.     attempts++;
+66.   }
+67.   
+68.   if (WiFi.status() == WL_CONNECTED) {
+69.     Serial.println("\nWiFi підключено!");
+70.     Serial.print("IP адреса: ");
+71.     Serial.println(WiFi.localIP());
+72.     Serial.print("Сигнал: ");
+73.     Serial.print(WiFi.RSSI());
+74.     Serial.println(" dBm");
+75.   } else {
+76.     Serial.println("\nПомилка підключення WiFi");
+77.   }
+78. }
+79. 
+80. void updateThresholds() {
+81.   if (WiFi.status() != WL_CONNECTED) {
+82.     Serial.println("WiFi не підключено для оновлення порогів");
+83.     return;
+84.   }
+85. 
+86.   HTTPClient http;
+87.   http.begin(thresholdsUrl);
+88.   http.setTimeout(5000);
+89.   
+90.   int httpCode = http.GET();
+91.   
+92.   if (httpCode == 200) {
+93.     String response = http.getString();
+94.     
+95.     StaticJsonDocument<512> doc;
+96.     DeserializationError error = deserializeJson(doc, response);
+97.     
+98.     if (!error) {
+99.       TEMP_MIN = doc["min_temperature"] | 18.0;
+100.       TEMP_MAX = doc["max_temperature"] | 26.0;
+101.       HUMIDITY_MIN = doc["min_humidity"] | 30.0;
+102.       HUMIDITY_MAX = doc["max_humidity"] | 70.0;
+103.       
+104.       Serial.println("\nПороги оновлено з сервера:");
+105.       Serial.print("Температура: ");
+106.       Serial.print(TEMP_MIN);
+107.       Serial.print(" - ");
+108.       Serial.println(TEMP_MAX);
+109.       Serial.print("Вологість: ");
+110.       Serial.print(HUMIDITY_MIN);
+111.       Serial.print(" - ");
+112.       Serial.println(HUMIDITY_MAX);
+113.     }
+114.   } else {
+115.     Serial.print("Помилка отримання порогів: ");
+116.     Serial.println(httpCode);
+117.   }
+118.   
+119.   http.end();
+120. }
+121. 
+122. void sendDataToServer(float temp, float humidity) {
+123.   if (WiFi.status() != WL_CONNECTED) {
+124.     Serial.println("WiFi не підключено");
+125.     return;
+126.   }
+127. 
+128.   HTTPClient http;
+129.   
+130.   http.begin(processUrl);
+131.   http.addHeader("Content-Type", "application/json");
+132.   
+133.   StaticJsonDocument<200> doc;
+134.   if (!isnan(temp)) doc["temperature"] = temp;
+135.   if (!isnan(humidity)) doc["humidity"] = humidity;
+136.   
+137.   String jsonData;
+138.   serializeJson(doc, jsonData);
+139.   
+140.   Serial.println("\nВідправка даних на сервер:");
+141.   Serial.println(processUrl);
+142.   Serial.println(jsonData);
+143.   
+144.   int httpCode = http.POST(jsonData);
+145.   
+146.   if (httpCode > 0) {
+147.     Serial.print("HTTP код відповіді: ");
+148.     Serial.println(httpCode);
+149.     
+150.     if (httpCode == 200) {
+151.       String response = http.getString();
+152.       Serial.println("Відповідь сервера:");
+153.       Serial.println(response);
+154.       
+155.       StaticJsonDocument<1024> responseDoc;
+156.       DeserializationError error = deserializeJson(responseDoc, response);
+157.       
+158.       if (!error) {
+159.         bool success = responseDoc["success"];
+160.         bool isAnomaly = responseDoc["is_anomaly"];
+161.         int commandsExecuted = responseDoc["commands_executed"];
+162.         int alertsCreated = responseDoc["alerts_created"];
+163.         
+164.         Serial.println("\nРезультат обробки:");
+165.         Serial.print("Успіх: ");
+166.         Serial.println(success ? "ТАК" : "НІ");
+167.         Serial.print("Аномалія: ");
+168.         Serial.println(isAnomaly ? "ТАК" : "НІ");
+169.         Serial.print("Команд виконано: ");
+170.         Serial.println(commandsExecuted);
+171.         Serial.print("Сповіщень створено: ");
+172.         Serial.println(alertsCreated);
+173.         
+174.         handleClimateControl(temp, humidity);
+175.       }
+176.     }
+177.   } else {
+178.     Serial.print("Помилка HTTP: ");
+179.     Serial.println(http.errorToString(httpCode));
+180.   }
+181.   
+182.   http.end();
+183. }
+184. 
+185. void handleClimateControl(float temp, float humidity) {
+186.   Serial.println("\nУправління кліматом:");
+187.   
+188.   if (temp < TEMP_MIN || humidity < HUMIDITY_MIN) {
+189.     Serial.println("УВІМКНУТИ обігрів");
+190.     Serial.println("Сервопривод -> 90°");
+191.     climateServo.write(90);
+192.   } else if (temp > TEMP_MAX || humidity > HUMIDITY_MAX) {
+193.     Serial.println("УВІМКНУТИ охолодження");
+194.     Serial.println("Сервопривод -> 180°");
+195.     climateServo.write(180);
+196.   } else {
+197.     Serial.println("Клімат в нормі");
+198.     Serial.println("Сервопривод -> 0°");
+199.     climateServo.write(0);
+200.   }
+201. }
+202. 
+203. void checkLocalAnomalies(float temp, float humidity) {
+204.   bool anomaly = false;
+205.   
+206.   if (!isnan(temp) && (temp < TEMP_MIN || temp > TEMP_MAX)) {
+207.     Serial.print("ЛОКАЛЬНА АНОМАЛІЯ: Температура ");
+208.     Serial.print(temp);
+209.     Serial.println("°C поза нормою");
+210.     anomaly = true;
+211.   }
+212.   
+213.   if (!isnan(humidity) && (humidity < HUMIDITY_MIN || humidity > HUMIDITY_MAX)) {
+214.     Serial.print("ЛОКАЛЬНА АНОМАЛІЯ: Вологість ");
+215.     Serial.print(humidity);
+216.     Serial.println("% поза нормою");
+217.     anomaly = true;
+218.   }
+219.   
+220.   digitalWrite(LED_RED, anomaly ? HIGH : LOW);
+221.   Serial.print("Червоний світлодіод: ");
+222.   Serial.println(anomaly ? "УВІМКНЕНО" : "ВИМКНЕНО");
+223. }
+224. 
+225. void setup() {
+226.   Serial.begin(115200);
+227.   delay(1000);
+228.   
+229.   Serial.println("\n╔════════════════════════════════════════╗");
+230.   Serial.println("║   IoT Climate Monitor - ESP32          ║");
+231.   Serial.println("║   Інтеграція з FastAPI Backend        ║");
+232.   Serial.println("╚════════════════════════════════════════╝");
+233.   
+234.   pinMode(LED_RED, OUTPUT);
+235.   digitalWrite(LED_RED, LOW);
+236.   
+237.   dht.begin();
+238.   
+239.   climateServo.attach(SERVO_PIN);
+240.   climateServo.write(0);
+241.   
+242.   Serial.println("\nКомпоненти ініціалізовано");
+243.   
+244.   connectWiFi();
+245.   
+246.   if (WiFi.status() == WL_CONNECTED) {
+247.     updateThresholds();
+248.   }
+249.   
+250.   Serial.println("\nСистема готова до роботи!");
+251.   Serial.print("Base URL: ");
+252.   Serial.println(baseUrl);
+253.   Serial.print("Sensor ID: ");
+254.   Serial.println(sensorId);
+255.   Serial.println("════════════════════════════════════════\n");
+256. }
+257. 
+258. void loop() {
+259.   unsigned long currentTime = millis();
+260.   
+261.   if (currentTime - lastThresholdUpdate >= thresholdUpdateInterval) {
+262.     lastThresholdUpdate = currentTime;
+263.     updateThresholds();
+264.   }
+265.   
+266.   if (currentTime - lastSendTime >= sendInterval) {
+267.     lastSendTime = currentTime;
+268.     
+269.     Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+270.     Serial.println("Новий цикл зчитування");
+271.     
+272.     float temp = dht.readTemperature();
+273.     float humidity = dht.readHumidity();
+274.     
+275.     if (isnan(temp) || isnan(humidity)) {
+276.       Serial.println("Помилка читання DHT22!");
+277.       digitalWrite(LED_RED, HIGH);
+278.       return;
+279.     }
+280.     
+281.     Serial.print("Температура: ");
+282.     Serial.print(temp);
+283.     Serial.println(" °C");
+284.     Serial.print("Вологість: ");
+285.     Serial.print(humidity);
+286.     Serial.println(" %");
+287.     
+288.     checkLocalAnomalies(temp, humidity);
+289.     sendDataToServer(temp, humidity);
+290.     
+291.     Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+292.   }
+293.   
+294.   if (WiFi.status() != WL_CONNECTED) {
+295.     Serial.println("\nWiFi відключено, спроба перепідключення...");
+296.     connectWiFi();
+297.   }
+298.   
+299.   delay(100);
+300. }
+301. 
+
+2
+
+
