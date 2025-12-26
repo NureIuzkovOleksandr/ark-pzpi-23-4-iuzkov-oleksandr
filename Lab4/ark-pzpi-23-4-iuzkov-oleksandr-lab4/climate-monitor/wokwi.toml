@@ -1,0 +1,10 @@
+[wokwi]
+version = 1
+elf = ".pio/build/esp32dev/firmware.elf"
+firmware = ".pio/build/esp32dev/firmware.bin"
+
+[[wokwi.lib]]
+name = "DHT sensor library"
+
+[[wokwi.lib]]
+name = "ESP32Servo"
